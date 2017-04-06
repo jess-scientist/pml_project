@@ -1,0 +1,109 @@
+---
+title: "Final Project"
+author: "Jess"
+date: "April 5, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Overview
+In this document we will show how we predict how well someone performed an activity based on their data 
+from a personal fitness tracker. We will use two different models, trees and random forest, and compared their accuracy. The data from this project comes from [link](http://groupware.les.inf.puc-rio.br/har). 
+
+##Reading the data
+First we read in the training and test data and load the caret package
+```{r message=FALSE}
+training<-read.csv("pml-training.csv")
+testing <-read.csv("pml-testing.csv")
+library(caret)
+```
+
+##Separate into trainging and validation datasets
+We need to separate the data in to a training set to train the model on, and a 
+validation set to test if the model is accurate or not.  The test set is for the 
+final test.  Here we separate the data into 70/30 portions.  
+
+```{r}
+inTrain <- createDataPartition(y=training$classe,p=0.7,list=FALSE)
+mytrain <- training[inTrain,]
+validation <- training[-inTrain,]
+```
+
+##Cleaning the data 
+Many of the variables have lots of missing data points, or they don't really vary, 
+which means they won't be useful to the analysis. We need to get rid of these points 
+before using them to predict.  
+
+Everything we do to the training set, we need to also do to the validation and test sets.
+
+First we remove columns with little to no variaiton, because they won't help us predict.
+
+```{r}
+zerovar <- nearZeroVar(mytrain)
+mytrain <- mytrain[,-zerovar]
+validation <- validation[,-zerovar]
+test <- testing[,-zerovar]
+```
+
+Next we remove the first few columns that are useless to the model (timestamps and such).
+```{r}
+smalltrain <- mytrain[,-c(1:6)] 
+smallvalid <- validation[,-c(1:6)] ; 
+smalltest <- test[,-c(1:6)]
+```
+
+And finally, we remove the columns that have NAs in them
+```{r}
+nonas <- colSums(is.na(smalltrain))==0
+smalltrain <- smalltrain[,nonas]
+smallvalid <- smallvalid[,nonas]
+smalltest <- smalltest[,nonas]
+```
+
+##Predicting with Trees
+For our first model, we'll try predicting with trees using Rpart.  
+```{r cache=T}
+modtree <- train(classe~.,method="rpart",data=smalltrain)
+```
+A plot of the tree model
+```{r message=F}
+library(rattle)
+fancyRpartPlot(modtree$finalModel,sub="")
+```
+
+Now we predict on the validation set and determine the accuracy
+```{r message=F}
+predtree <- predict(modtree,smallvalid)
+confusionMatrix(smallvalid$classe,predtree)
+```
+
+The accuracy is only 50%, so we should try another model
+
+##Predicting with Random Forest
+Random Forests are often better, but slow. Let's try it
+```{r cache=T, message=F}
+control <- trainControl(method="cv",number=3)
+modrf <- train(classe~.,method="rf",data=smalltrain,trControl=control)
+```
+
+Now predict on the validation set and determine accuracy
+```{r message=F}
+predrf <- predict(modrf,smallvalid)
+confusionMatrix(smallvalid$classe,predrf)
+```
+
+The accuracy is 99%, so we are satisfied with this model.
+
+##Final predictions for test set
+Now we do our final prediction on the test set
+```{r}
+predict(modrf,smalltest)
+```
+
+##Summary
+In the end we showed that the best model is the random forest, with an accuracy of 99%, compared to the 
+rpart model that only had 50% accuracy.  
+
